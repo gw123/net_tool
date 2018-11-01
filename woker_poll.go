@@ -55,6 +55,7 @@ type Worker struct {
 	StopFlag      bool
 	runFlag       bool
 	firstRunFlag  bool
+	IsBusy  	  bool
 	timeoutChan   <-chan time.Time
 	SyncWaitGroup *sync.WaitGroup
 	isLoopWait    bool
@@ -159,12 +160,31 @@ func (this *Worker) run() {
 		}
 		job := <-this.Jobs
 		fmt.Println("job over wId: "+job.WorkerName, " "+string(job.Payload))
-		fmt.Println( this.WorkerName ,len(this.Jobs), this.isLoopWait)
-
+		fmt.Println(this.WorkerName, len(this.Jobs), this.isLoopWait)
 		time.Sleep(time.Millisecond * 1)
 	}
 	fmt.Println(this.WorkerName + "任务执行完成2")
 }
+
+/***
+ * WorkGroup
+ */
+type WorkGroup struct {
+	Workers []Worker
+	Length int
+}
+
+func NewWorkGroup(size int) (*WorkGroup) {
+	this := new(WorkGroup)
+	this.Workers = make([]Worker, size)
+	this.Length = size
+	return this
+}
+
+func (this *WorkGroup)DispatchJob(job *Job)  {
+
+}
+
 
 /****
  * 利用channel同步协程
@@ -189,18 +209,13 @@ func main() {
 	worker1.Begin()
 	worker2 := NewWorker(&waitGroup, "worker2", false)
 	worker2.Begin()
-	//job := NewJob([]byte("hello world"))
-	//worker.AppendJob(job)
-	//job = NewJob([]byte("hello world"))
-	//worker.AppendJob(job)
-	//job = NewJob([]byte("hello world"))
-	//worker.AppendJob(job)
+
 	for i := 1; i <= 10; i++ {
-		//job := NewJob([]byte(fmt.Sprintf("job1 %d", i)))
-		//worker1.AppendJob(job)
-		//i++
-		//job = NewJob([]byte(fmt.Sprintf("job2 %d", i)))
-		//worker2.AppendJob(job)
+		job := NewJob([]byte(fmt.Sprintf("job1 %d", i)))
+		worker1.AppendJob(job)
+		i++
+		job = NewJob([]byte(fmt.Sprintf("job2 %d", i)))
+		worker2.AppendJob(job)
 	}
 	waitGroup.Wait()
 
