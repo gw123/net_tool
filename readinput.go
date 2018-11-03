@@ -6,6 +6,8 @@ import (
 	"unsafe"
 	"io/ioutil"
 	"regexp"
+	"strings"
+	"errors"
 )
 
 type InputEvent struct {
@@ -50,20 +52,102 @@ const KEY_KPENTER = 96
 const KEY_KPSLASH = 98
 
 func main() {
+	inputKeyBorad := &InputKeyBorad{}
+	inputKeyBorad.SetDeviceName("HID 13ba:0001")
+	err := inputKeyBorad.Open()
+	if err != nil {
+		fmt.Println("inputKeyBorad.Open: ", err)
+		return
+	}
+	defer inputKeyBorad.Close()
+	for ; ; {
+		word, err := inputKeyBorad.Read()
+		if err != nil {
+			fmt.Println("inputKeyBorad.Read: ", err)
+			break
+		}
+		fmt.Println("input ", word)
+	}
+}
+
+type InputInterface interface {
+	Close() error
+	Read() (n byte, err error)
+	SetDeviceName(deviceName string)
+	GetDeviceName() (string)
+	Open()
+}
+
+type InputKeyBorad struct {
+	DeviceName string
+	Filename   string
+	fileHandel *os.File
+	InputChan  chan byte
+}
+
+func (this *InputKeyBorad) GetDeviceName() string {
+	return this.DeviceName
+}
+
+func (this *InputKeyBorad) SetDeviceName(deviceName string) {
+	this.DeviceName = deviceName
+}
+
+func (this *InputKeyBorad) Open() error {
+	filename, err := this.GetDevicePath()
+	if err != nil {
+		return err
+	}
+	this.fileHandel, err = os.OpenFile(filename, os.O_RDONLY, 0660)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (this *InputKeyBorad) Close() error {
+	err := this.fileHandel.Close()
+	return err
+}
+
+func (this *InputKeyBorad) Read() (n byte, err error) {
+	buffer := make([]byte, 24)
+	for ; ; {
+		_, err := this.fileHandel.Read(buffer)
+		if err != nil {
+			return n, err
+		}
+		inputEvent := *(**InputEvent)(unsafe.Pointer(&buffer))
+		//fmt.Println("buffer:", inputEvent.Type, inputEvent.Code, inputEvent.Value)
+		switch inputEvent.Type {
+		case EV_KEY:
+			if inputEvent.Code == KEY_NUMLOCK {
+				break
+			}
+			if inputEvent.Value != 1 {
+				return ParseCode(inputEvent.Code), nil
+			}
+			break
+		case EV_SYN:
+			//fmt.Println("同步")
+			break
+		}
+	}
+	return n, err
+}
+
+func (this *InputKeyBorad) GetDevicePath() (string, error) {
 	devices, err := os.OpenFile("/proc/bus/input/devices", os.O_RDONLY, 0660)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return "", err
 	}
 
 	devicesContent, err := ioutil.ReadAll(devices)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return "", err
 	}
-
 	rule := `I: Bus=.*
-N: Name="HID 13ba:0001"
+N: Name="{deviceName}"
 P: Phys=.*
 S: Sysfs=.*
 U: Uniq=.*
@@ -74,46 +158,14 @@ B: KEY=.*
 B: MSC=.*
 B: LED=.*
 `
+	rule = strings.Replace(rule, "{deviceName}", this.DeviceName, -1)
 	r1, _ := regexp.Compile(rule)
 	temps := r1.FindStringSubmatch(string(devicesContent))
-
 	if len(temps) != 2 {
-		fmt.Println("请插入设备")
-		return
+		return "", errors.New("请插入设备")
 	}
 	filename := "/dev/input/event" + temps[1]
-	file, err := os.OpenFile(filename, os.O_RDONLY, 0660)
-	if err != nil {
-		fmt.Println(err)
-		return
-	} else {
-		fmt.Println("Open " + filename)
-	}
-	buffer := make([]byte, 24)
-
-	for ; ; {
-		_, err := file.Read(buffer)
-		inputEvent := *(**InputEvent)(unsafe.Pointer(&buffer))
-
-		if err != nil {
-			fmt.Println(err)
-		}
-		//fmt.Println("buffer:", inputEvent.Type, inputEvent.Code, inputEvent.Value)
-		switch inputEvent.Type {
-		case EV_KEY:
-			if inputEvent.Code == KEY_NUMLOCK {
-				break
-			}
-			if inputEvent.Value != 1 {
-				fmt.Printf("Input:%c \n", ParseCode(inputEvent.Code));
-			}
-			break
-		case EV_SYN:
-			//fmt.Println("同步")
-			break
-		}
-	}
-
+	return filename, nil
 }
 
 func ParseCode(code uint16) byte {

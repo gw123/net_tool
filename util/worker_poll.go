@@ -1,15 +1,15 @@
-package main
+package util
 
 import (
 	"fmt"
 	//"time"
 	"sync"
 	"time"
-	"os"
-	"os/signal"
-	"syscall"
 	"io"
 )
+
+const JobFlagEnd = 0
+const JobFlagNormal = 1
 
 type Job struct {
 	WorkerName  string
@@ -35,6 +35,7 @@ func NewJob(payload []byte) (job *Job) {
 	job = new(Job)
 	job.CreatedTime = time.Now().Unix()
 	job.Payload = payload
+	job.Flag = JobFlagNormal
 	return
 }
 
@@ -55,7 +56,8 @@ type Worker struct {
 	StopFlag      bool
 	runFlag       bool
 	firstRunFlag  bool
-	IsBusy  	  bool
+	isBusy        bool
+	isBusyMutex   sync.Mutex
 	timeoutChan   <-chan time.Time
 	SyncWaitGroup *sync.WaitGroup
 	isLoopWait    bool
@@ -63,7 +65,7 @@ type Worker struct {
 
 func NewWorker(waitGroup *sync.WaitGroup, workerName string, isLoopWait bool) (worker *Worker) {
 	worker = new(Worker)
-	worker.Jobs = make(chan *Job, MaxJobs)
+	worker.Jobs = make(chan *Job, 1)
 
 	worker.StartChan = make(chan int)
 	worker.PauseChan = make(chan int)
@@ -74,9 +76,28 @@ func NewWorker(waitGroup *sync.WaitGroup, workerName string, isLoopWait bool) (w
 	worker.StopFlag = false
 	worker.runFlag = false
 	worker.firstRunFlag = false
+	worker.isBusy = false
+
 	worker.isLoopWait = isLoopWait
 	worker.WorkerName = workerName
 	return
+}
+
+func (this *Worker) SetWaitGroup(group *sync.WaitGroup) {
+	this.SyncWaitGroup = group
+	this.SyncWaitGroup.Add(1)
+}
+
+func (this *Worker) SetWorkerName(workerName string) {
+	this.WorkerName = workerName
+}
+
+func (this *Worker) SetLoopWait(flag bool) {
+	this.isLoopWait = flag
+}
+
+func (this *Worker) IsBusy() bool {
+	return this.isBusy
 }
 
 func (this *Worker) SetTimeOut(timeout time.Duration) {
@@ -96,8 +117,13 @@ func (this *Worker) Pause() {
 }
 
 func (this *Worker) AppendJob(job *Job) {
+	if this.StopFlag {
+		fmt.Println(this.WorkerName, "Run over!!")
+		return
+	}
 	job.WorkerName = this.WorkerName
 	this.Jobs <- job
+	this.isBusy = true
 }
 
 func (this *Worker) Begin() {
@@ -111,7 +137,7 @@ func (this *Worker) Begin() {
 }
 
 func (this *Worker) control() {
-	fmt.Println("Control")
+	//fmt.Println("Control")
 	for ; ; {
 		if this.StopFlag {
 			break
@@ -120,7 +146,7 @@ func (this *Worker) control() {
 		case <-this.StartChan:
 			fmt.Println("start")
 		case <-this.StopChan:
-			fmt.Println("stop")
+			//fmt.Println("stop")
 			this.StopFlag = true
 			this.runFlag = false
 		case <-this.PauseChan:
@@ -130,93 +156,59 @@ func (this *Worker) control() {
 			fmt.Println("timeoutChan")
 			this.StopFlag = true
 			this.runFlag = false
-		case <-this.runOverChan:
-			fmt.Println("runOverChan")
-			this.StopFlag = true
-			this.runFlag = false
+
 		}
 	}
 }
 
 func (this *Worker) run() {
 	defer func() {
-		this.runOverChan <- 1
-		this.SyncWaitGroup.Done()
-		fmt.Println(this.WorkerName + "任务执行完成3")
+		this.StopFlag = true
+		this.runFlag = false
+
+		if this.SyncWaitGroup != nil {
+			this.SyncWaitGroup.Done()
+		} else {
+			fmt.Println(this.SyncWaitGroup, "not set")
+		}
+		//this.SyncWaitGroup.Done()
+		//fmt.Println(this.WorkerName + "任务执行完成step3")
 	}()
 
 	for ; ; {
 		if len(this.Jobs) == 0 && !this.isLoopWait {
-			fmt.Println(this.WorkerName + "任务执行完成1")
+			//fmt.Println(this.WorkerName + "任务执行完成step1")
+			//this.runOverChan <- 1
+			this.isBusy = false
 			break
 		}
 		if this.StopFlag {
+			//fmt.Println(this.WorkerName+"任务执行完成step1", "StopFlag")
+			this.isBusy = false
+			//this.runOverChan <- 1
 			break
 		}
 
 		if !this.runFlag {
 			time.Sleep(time.Millisecond * 100)
+			this.isBusy = false
+
 			continue
 		}
+
 		job := <-this.Jobs
-		fmt.Println("job over wId: "+job.WorkerName, " "+string(job.Payload))
-		fmt.Println(this.WorkerName, len(this.Jobs), this.isLoopWait)
-		time.Sleep(time.Millisecond * 1)
-	}
-	fmt.Println(this.WorkerName + "任务执行完成2")
-}
-
-/***
- * WorkGroup
- */
-type WorkGroup struct {
-	Workers []Worker
-	Length int
-}
-
-func NewWorkGroup(size int) (*WorkGroup) {
-	this := new(WorkGroup)
-	this.Workers = make([]Worker, size)
-	this.Length = size
-	return this
-}
-
-func (this *WorkGroup)DispatchJob(job *Job)  {
-
-}
-
-
-/****
- * 利用channel同步协程
- */
-func main() {
-	var falg_stop bool = false
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGUSR2)
-		signal.Notify(c, syscall.SIGINT)
-		for {
-			s := <-c
-			//收到信号后的处理，这里只是输出信号内容，可以做一些更有意思的事
-			fmt.Println("get signal:", s)
-			fmt.Println("完成已处理任务队列后程序结束")
-			falg_stop = true
+		if job.Flag == JobFlagEnd {
+			//this.runOverChan <- 1
+			this.isBusy = false
+			break
 		}
-	}()
+		fmt.Println("Job over wId: "+job.WorkerName, " "+string(job.Payload))
+		//fmt.Println(this.WorkerName, len(this.Jobs), this.StopFlag)
+		time.Sleep(time.Millisecond * 1)
+		this.isBusy = false
+		this.runOverChan <- 1
 
-	waitGroup := sync.WaitGroup{}
-	worker1 := NewWorker(&waitGroup, "worker1", false)
-	worker1.Begin()
-	worker2 := NewWorker(&waitGroup, "worker2", false)
-	worker2.Begin()
-
-	for i := 1; i <= 10; i++ {
-		job := NewJob([]byte(fmt.Sprintf("job1 %d", i)))
-		worker1.AppendJob(job)
-		i++
-		job = NewJob([]byte(fmt.Sprintf("job2 %d", i)))
-		worker2.AppendJob(job)
 	}
-	waitGroup.Wait()
 
+	//fmt.Println(this.WorkerName + "任务执行完成step2")
 }
