@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"unsafe"
 )
+
 type TestStructTobytes struct {
 	data int64
 }
+
 type SliceMock struct {
 	addr uintptr
 	len  int

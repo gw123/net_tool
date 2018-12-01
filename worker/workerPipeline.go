@@ -1,50 +1,19 @@
-package util
+package worker
 
 import (
 	"fmt"
 	//"time"
 	"sync"
 	"time"
-	"io"
+	"github.com/gw123/net_tool/worker/interfaces"
+	"github.com/pkg/errors"
 )
 
-const JobFlagEnd = 0
-const JobFlagNormal = 1
+const MaxJobs = 10
 
-type Job struct {
-	WorkerName  string
-	CreatedTime int64
-	UpdatedTime int64
-	Flag        int64
-	JobType     string
-	Payload     []byte
-	Response    []byte
-	Input       io.WriteCloser
-	Output      io.ReadCloser
-}
-
-func (this *Job) SetWriteCloser(input io.WriteCloser) {
-	this.Input = input
-}
-
-func (this *Job) SetReadCloser(ouput io.ReadCloser) {
-	this.Output = ouput
-}
-
-func NewJob(payload []byte) (job *Job) {
-	job = new(Job)
-	job.CreatedTime = time.Now().Unix()
-	job.Payload = payload
-	job.Flag = JobFlagNormal
-	return
-}
-
-const MaxJobs = 1000
-
-type Worker struct {
+type WorkerPipeline struct {
 	WorkerName string
-	Jobs       chan *Job
-
+	Jobs       chan interfaces.Job
 	//读到channel写入数据 woker 暂停执行新的job
 	PauseChan chan int
 	//读到个channel写入数据 worker 开始执行job
@@ -61,72 +30,87 @@ type Worker struct {
 	timeoutChan   <-chan time.Time
 	SyncWaitGroup *sync.WaitGroup
 	isLoopWait    bool
+
+	worker interfaces.Worker
 }
 
-func NewWorker(waitGroup *sync.WaitGroup, workerName string, isLoopWait bool) (worker *Worker) {
-	worker = new(Worker)
-	worker.Jobs = make(chan *Job, 1)
-
-	worker.StartChan = make(chan int)
-	worker.PauseChan = make(chan int)
-	worker.StopChan = make(chan int)
-	worker.runOverChan = make(chan int)
-	worker.SyncWaitGroup = waitGroup
-	worker.SyncWaitGroup.Add(1)
-	worker.StopFlag = false
-	worker.runFlag = false
-	worker.firstRunFlag = false
-	worker.isBusy = false
-
-	worker.isLoopWait = isLoopWait
-	worker.WorkerName = workerName
+func NewWorker(waitGroup *sync.WaitGroup, workerName string, isLoopWait bool) (workerPipeline *WorkerPipeline) {
+	workerPipeline = new(WorkerPipeline)
+	workerPipeline.Jobs = make(chan interfaces.Job, MaxJobs)
+	workerPipeline.StartChan = make(chan int)
+	workerPipeline.PauseChan = make(chan int)
+	workerPipeline.StopChan = make(chan int)
+	workerPipeline.runOverChan = make(chan int)
+	workerPipeline.SyncWaitGroup = waitGroup
+	workerPipeline.SyncWaitGroup.Add(1)
+	workerPipeline.StopFlag = false
+	workerPipeline.runFlag = false
+	workerPipeline.firstRunFlag = false
+	workerPipeline.isBusy = false
+	workerPipeline.isLoopWait = isLoopWait
+	workerPipeline.WorkerName = workerName
 	return
 }
 
-func (this *Worker) SetWaitGroup(group *sync.WaitGroup) {
+func (this *WorkerPipeline) SetWaitGroup(group *sync.WaitGroup) {
 	this.SyncWaitGroup = group
 	this.SyncWaitGroup.Add(1)
 }
 
-func (this *Worker) SetWorkerName(workerName string) {
+func (this *WorkerPipeline) SetWorker(worker interfaces.Worker) {
+	this.worker = worker
+}
+
+func (this *WorkerPipeline) SetWorkerName(workerName string) {
 	this.WorkerName = workerName
 }
 
-func (this *Worker) SetLoopWait(flag bool) {
+func (this *WorkerPipeline) SetLoopWait(flag bool) {
 	this.isLoopWait = flag
 }
 
-func (this *Worker) IsBusy() bool {
-	return this.isBusy
+func (this *WorkerPipeline) IsBusy() bool {
+	if this.isBusy {
+		return true
+	}
+	if len(this.Jobs) == MaxJobs {
+		return true
+	}
+	return false
 }
 
-func (this *Worker) SetTimeOut(timeout time.Duration) {
+func (this *WorkerPipeline) SetTimeOut(timeout time.Duration) {
 	this.timeoutChan = time.After(timeout)
 }
 
-func (this *Worker) Stop() {
+func (this *WorkerPipeline) Stop() {
 	this.StopChan <- 1
 }
 
-func (this *Worker) Start() {
+func (this *WorkerPipeline) Start() {
 	this.StartChan <- 1
 }
 
-func (this *Worker) Pause() {
+func (this *WorkerPipeline) Pause() {
 	this.PauseChan <- 1
 }
 
-func (this *Worker) AppendJob(job *Job) {
+func (this *WorkerPipeline) AppendJob(job interfaces.Job) error {
 	if this.StopFlag {
 		fmt.Println(this.WorkerName, "Run over!!")
-		return
+		return errors.New("流水线运行结束")
 	}
-	job.WorkerName = this.WorkerName
+	//job.WorkerName = this.WorkerName
+	if len(this.Jobs) == MaxJobs {
+		this.isBusy = true
+		return errors.New("流水线已满")
+	}
+	job.SetWorkerName(this.WorkerName)
 	this.Jobs <- job
-	this.isBusy = true
+	return nil
 }
 
-func (this *Worker) Begin() {
+func (this *WorkerPipeline) Begin() {
 	if this.firstRunFlag {
 		return
 	}
@@ -136,7 +120,7 @@ func (this *Worker) Begin() {
 	go this.run()
 }
 
-func (this *Worker) control() {
+func (this *WorkerPipeline) control() {
 	//fmt.Println("Control")
 	for ; ; {
 		if this.StopFlag {
@@ -156,12 +140,11 @@ func (this *Worker) control() {
 			fmt.Println("timeoutChan")
 			this.StopFlag = true
 			this.runFlag = false
-
 		}
 	}
 }
 
-func (this *Worker) run() {
+func (this *WorkerPipeline) run() {
 	defer func() {
 		this.StopFlag = true
 		this.runFlag = false
@@ -178,36 +161,33 @@ func (this *Worker) run() {
 	for ; ; {
 		if len(this.Jobs) == 0 && !this.isLoopWait {
 			//fmt.Println(this.WorkerName + "任务执行完成step1")
-			//this.runOverChan <- 1
 			this.isBusy = false
 			break
 		}
 		if this.StopFlag {
 			//fmt.Println(this.WorkerName+"任务执行完成step1", "StopFlag")
 			this.isBusy = false
-			//this.runOverChan <- 1
 			break
 		}
 
 		if !this.runFlag {
 			time.Sleep(time.Millisecond * 100)
 			this.isBusy = false
-
 			continue
 		}
 
 		job := <-this.Jobs
-		if job.Flag == JobFlagEnd {
-			//this.runOverChan <- 1
+		if job.GetJobFlag() == interfaces.JobFlagEnd {
 			this.isBusy = false
 			break
 		}
-		fmt.Println("Job over wId: "+job.WorkerName, " "+string(job.Payload))
+		job.DoJob()
+		//开始执行任务...
+		//fmt.Println("Job over wId: "+job.GetWorkerName(), " "+string(job.GetPayload()))
 		//fmt.Println(this.WorkerName, len(this.Jobs), this.StopFlag)
 		time.Sleep(time.Millisecond * 1)
 		this.isBusy = false
 		this.runOverChan <- 1
-
 	}
 
 	//fmt.Println(this.WorkerName + "任务执行完成step2")

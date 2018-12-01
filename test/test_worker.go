@@ -6,7 +6,6 @@ import (
 "os"
 "os/signal"
 "syscall"
-"github.com/gw123/net_tool/util"
 )
 
 
@@ -30,16 +29,16 @@ func main() {
 
 
 	waitGroup := sync.WaitGroup{}
-	worker1 := util.NewWorker(&waitGroup, "worker1", false)
+	worker1 := worker.NewWorker(&waitGroup, "worker1", false)
 	worker1.Begin()
-	worker2 := util.NewWorker(&waitGroup, "worker2", false)
+	worker2 := worker.NewWorker(&waitGroup, "worker2", false)
 	worker2.Begin()
 
 	for i := 1; i <= 10; i++ {
-		job := util.NewJob([]byte(fmt.Sprintf("job1 %d", i)))
+		job := worker.NewJob([]byte(fmt.Sprintf("job1 %d", i)))
 		worker1.AppendJob(job)
 		i++
-		job = util.NewJob([]byte(fmt.Sprintf("job2 %d", i)))
+		job = worker.NewJob([]byte(fmt.Sprintf("job2 %d", i)))
 		worker2.AppendJob(job)
 	}
 	waitGroup.Wait()

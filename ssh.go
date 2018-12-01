@@ -39,7 +39,6 @@ func connect(user, password, host string, port int) (*ssh.Session, error) {
 
 	// connet to ssh
 	addr = fmt.Sprintf("%s:%d", host, port)
-
 	if client, err = ssh.Dial("tcp", addr, clientConfig); err != nil {
 		return nil, err
 	}
@@ -81,7 +80,6 @@ func tryAuth()  {
 
 //远程执行ssh
 func main() {
-
 	session, err := connect("root", "admin", "192.168.0.1", 22)
 	if err != nil {
 		log.Fatal("connect: ", err)
@@ -120,5 +118,4 @@ func main() {
 	//session.Run("top")
 	session.Run("ash")
 	session.Wait()
-
 }

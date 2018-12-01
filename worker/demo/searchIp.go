@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"github.com/gw123/net_tool/util"
+	"github.com/gw123/net_tool/worker"
+	"strconv"
+	"github.com/gw123/net_tool/worker/demo/app"
 )
 
 /****
@@ -26,17 +28,17 @@ func main() {
 		}
 	}()
 
-	group := util.NewWorkerGroup(100)
+	group := worker.NewWorkerGroup(100)
 	group.Start()
 
-	for i := 1; i <= 1000000; i++ {
-		job := util.NewJob([]byte(fmt.Sprintf("job %d", i)))
+	for i := 1; i < 255; i++ {
+		ipaddr := "192.168.1." + strconv.Itoa(i)+":80"
+		job := app.NewCheckIsOpenWRTJob(ipaddr)
 		group.DispatchJob(job)
 	}
 
 	group.Stop()
 	group.Wait()
-
 	//for i := 1; i <= 100; i++ {
 	//	work := <- group.WaitingChan
 	//	fmt.Println(work)

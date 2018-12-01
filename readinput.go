@@ -53,7 +53,8 @@ const KEY_KPSLASH = 98
 
 func main() {
 	inputKeyBorad := &InputKeyBorad{}
-	inputKeyBorad.SetDeviceName("HID 13ba:0001")
+	//HID 1267:0210  HID 13ba:0001
+	inputKeyBorad.SetDeviceName("HID 1267:0210")
 	err := inputKeyBorad.Open()
 	if err != nil {
 		fmt.Println("inputKeyBorad.Open: ", err)
@@ -117,8 +118,8 @@ func (this *InputKeyBorad) Read() (n byte, err error) {
 		if err != nil {
 			return n, err
 		}
-		inputEvent := *(**InputEvent)(unsafe.Pointer(&buffer))
-		//fmt.Println("buffer:", inputEvent.Type, inputEvent.Code, inputEvent.Value)
+		inputEvent := *(**InputEventX86)(unsafe.Pointer(&buffer))
+		fmt.Println("buffer:", inputEvent.Type, inputEvent.Code, inputEvent.Value)
 		switch inputEvent.Type {
 		case EV_KEY:
 			if inputEvent.Code == KEY_NUMLOCK {
@@ -165,6 +166,7 @@ B: LED=.*
 		return "", errors.New("请插入设备")
 	}
 	filename := "/dev/input/event" + temps[1]
+	fmt.Println(filename)
 	return filename, nil
 }
 

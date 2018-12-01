@@ -1,28 +1,29 @@
-package util
+package worker
 
 import (
 	"sync"
 	"fmt"
+	"github.com/gw123/net_tool/worker/interfaces"
 )
 
 /***
  * WorkerGroup
  */
 type WorkerGroup struct {
-	Workers         []*Worker
+	Workers         []*WorkerPipeline
 	Length          int
 	waitGroup       *sync.WaitGroup
-	WaitingChan     chan *Worker
+	WaitingChan     chan *WorkerPipeline
 	WorkerSyncChans []chan int
 }
 
 func NewWorkerGroup(size int) (*WorkerGroup) {
 	this := new(WorkerGroup)
-	this.Workers = make([]*Worker, size)
+	this.Workers = make([]*WorkerPipeline, size)
 	this.Length = size
 	this.waitGroup = &sync.WaitGroup{}
 
-	this.WaitingChan = make(chan *Worker, size)
+	this.WaitingChan = make(chan *WorkerPipeline, size)
 	this.WorkerSyncChans = make([]chan int, size)
 	for index, _ := range this.Workers {
 		this.Workers[index] = NewWorker(this.waitGroup, fmt.Sprintf("Worker_%d", index), true)
@@ -35,7 +36,7 @@ func NewWorkerGroup(size int) (*WorkerGroup) {
 	return this
 }
 
-func (this *WorkerGroup) DispatchJob(job *Job) {
+func (this *WorkerGroup) DispatchJob(job interfaces.Job) {
 	for {
 		worker := <-this.WaitingChan
 		worker.AppendJob(job)
@@ -46,7 +47,7 @@ func (this *WorkerGroup) DispatchJob(job *Job) {
 func (this *WorkerGroup) Stop() {
 	for _, worker := range this.Workers {
 		job := NewJob([]byte(""))
-		job.Flag = JobFlagEnd
+		job.Flag = interfaces.JobFlagEnd
 		worker.AppendJob(job)
 		worker.Stop()
 	}
@@ -54,7 +55,7 @@ func (this *WorkerGroup) Stop() {
 
 func (this *WorkerGroup) Control() {
 	for _, worker := range this.Workers {
-		go func(worker *Worker) {
+		go func(worker *WorkerPipeline) {
 			for ; ; {
 				<-worker.runOverChan
 				this.WaitingChan <- worker
