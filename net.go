@@ -1,12 +1,5 @@
 package main
 
-import (
-	"net"
-	"fmt"
-	//"io/ioutil"
-	"time"
-)
-
 func main() {
 	//address := "192.168.1.1:80"
 	//
@@ -23,3 +16,6 @@ func main() {
 	//conn.Read(buffer)
 	//fmt.Println(buffer)
 }
+
+
+
