@@ -72,6 +72,10 @@ func GetIpList(ignoreNetworks []string) (ipList []string) {
 						continue
 					}
 
+					if strings.Contains(netAdaper.Name, "vmnet") {
+						continue
+					}
+
 					fmt.Println(netAdaper.Name)
 					fmt.Print("\tIp2: ", ipnet.IP.String())
 					fmt.Println("\tmask: ", ipnet.Mask)

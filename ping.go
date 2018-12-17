@@ -9,9 +9,11 @@ import (
 	"time"
 	//"sort"
 	"sync"
+	"strings"
 )
 
 type HostMap map[string]int
+
 var SuccessMap HostMap
 var mutex sync.Mutex
 
@@ -28,9 +30,7 @@ func main() {
 	flag.BoolVar(&neverstop, "t", false, "Ping 指定的主机，直到停止。")
 	flag.Parse()
 	//args := flag.Args()
-	ch := make(chan int)
 	argsmap := map[string]interface{}{}
-
 	argsmap["w"] = timeout
 	argsmap["n"] = count
 	argsmap["l"] = size
@@ -38,46 +38,66 @@ func main() {
 
 	hosts := utils.GetIpList(nil)
 
+	isNeedRoot := func(host string) bool {
+		conn, err := net.DialTimeout("ip4:icmp", host, time.Duration(timeout*1000*1000))
+		if err != nil {
+			if strings.Contains(err.Error(), "operation not permitted") {
+				return true
+			}
+		}
+		conn.Close()
+		return false
+	}(hosts[0])
+	if isNeedRoot {
+		fmt.Println("需要管理员权限...")
+		return
+	}
+
 	//xun'hu
 	fmt.Println("开始扫描.....")
+	wg := &sync.WaitGroup{}
 	for _, host := range hosts {
-		go ping(host, ch, argsmap)
+
+		wg.Add(1)
+		go func(ip string, c *sync.WaitGroup) {
+			defer wg.Done()
+
+			isOk := ping(ip, argsmap)
+			mutex.Lock()
+			if isOk {
+
+				SuccessMap[ip] = 1
+			} else {
+
+				SuccessMap[ip] = 0
+			}
+
+			mutex.Unlock()
+		}(host, wg)
 	}
 
-	for i := 0; i < len(hosts); i++ {
-		<-ch
-	}
+	wg.Wait()
 
-	if len(SuccessMap) == 0 {
-		println("未找到存在的主机")
-		os.Exit(2)
-	}
-
-	//sortArr := []HostItem{}
 	for h1, t1 := range SuccessMap {
 		if t1 == 0 {
 			continue
 		}
 		fmt.Println("Ip: ", h1)
-		//sortArr = append(sortArr, HostItem{Ip: h1, UsedTime: t1})
 	}
-	//sort.Sort(HostArr(sortArr))
-	//for _, item := range sortArr {
-	//	fmt.Printf("Host:%-12s \t seq:[ %s ] \n", item.Ip, int2bin(item.UsedTime))
-	//}
-	//os.Exit(0)
+
 }
 
-func ping(host string, c chan int, args map[string]interface{}) {
+func ping(host string, args map[string]interface{}) bool {
 	var timeout = 5000
 	size := 32
 	starttime := time.Now()
 	conn, err := net.DialTimeout("ip4:icmp", host, time.Duration(timeout*1000*1000))
 	if err != nil {
-		println("DialTimeout: ", host, err)
-		return
+		//fmt.Println("DialTimeout ",err)
+		return false
 	}
-	ip := conn.RemoteAddr()
+	//fmt.Println("ping ", host)
+	//ip := conn.RemoteAddr()
 	//cname, _ := net.LookupCNAME(host)
 	//fmt.Println(cname)
 	//fmt.Println("正在 Ping " + cname + " [" + ip.String() + "] 具有 32 字节的数据:")
@@ -108,8 +128,8 @@ func ping(host string, c chan int, args map[string]interface{}) {
 
 		conn, err = net.DialTimeout("ip:icmp", host, time.Duration(timeout*1000*1000))
 		if err != nil {
-			fmt.Println("DialTimeout ", err)
-			return
+			//fmt.Println("DialTimeout --- ", err)
+			return false
 		}
 
 		starttime = time.Now()
@@ -122,17 +142,13 @@ func ping(host string, c chan int, args map[string]interface{}) {
 		//fmt.Println("len:" ,ECHO_REPLY_HEAD_LEN+length)
 		n, err := conn.Read(receive)
 		if err != nil {
-			//可以记录日志
-			//fmt.Println("conn.Read ", err)
-			//log.Error(err)
+			return false
 		}
 		_ = n
 		conn.Close()
 		var endduration int = int(int64(time.Since(starttime)) / (1000 * 1000))
 
 		sumT += endduration
-
-		//time.Sleep(1000 * 1000 * 1000)
 
 		if err != nil || receive[ECHO_REPLY_HEAD_LEN+4] != msg[4] || receive[ECHO_REPLY_HEAD_LEN+5] != msg[5] || receive[ECHO_REPLY_HEAD_LEN+6] != msg[6] || receive[ECHO_REPLY_HEAD_LEN+7] != msg[7] || endduration >= int(timeout) || receive[ECHO_REPLY_HEAD_LEN] == 11 {
 			lostN++
@@ -153,21 +169,10 @@ func ping(host string, c chan int, args map[string]interface{}) {
 			//			fmt.Println(ttl)
 			//fmt.Println("来自 " + cname + "[" + ip.String() + "]" + " 的回复: 字节=32 时间=" + strconv.Itoa(endduration) + "ms TTL=" + strconv.Itoa(ttl))
 		}
-
 		seq++
 	}
-
-	mutex.Lock()
-	if lostN != sendN {
-		SuccessMap[ip.String()] = SuccessMap[ip.String()] << 1
-		SuccessMap[ip.String()] += 1
-	} else {
-		SuccessMap[ip.String()] = SuccessMap[ip.String()] << 1
-	}
-	//SuccessMap[ip.String()] |= 1<<31
-	mutex.Unlock()
 	//stat(ip.String(), sendN, lostN, recvN, shortT, longT, sumT)
-	c <- 1
+	return true
 }
 
 func checkSum(msg []byte) uint16 {
