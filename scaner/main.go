@@ -1,4 +1,4 @@
-package demo
+package main
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 	"github.com/gw123/net_tool/worker"
+	"github.com/gw123/net_tool/scaner/jobs"
+	"github.com/gw123/net_tool/utils"
 )
 
 /****
@@ -15,7 +17,6 @@ func main() {
 	var falg_stop bool = false
 	go func() {
 		c := make(chan os.Signal)
-		//signal.Notify(c, syscall.SIGUSR2)
 		signal.Notify(c, syscall.SIGINT)
 		for {
 			s := <-c
@@ -26,19 +27,15 @@ func main() {
 		}
 	}()
 
-	group := worker.NewWorkerGroup(1)
+	group := worker.NewWorkerGroup(256)
 	group.Start()
-
-	for i := 1; i <= 100000; i++ {
-		job := worker.NewJob([]byte(fmt.Sprintf("job %d", i)))
+	//aliveHosts := libs.GetAliveHosts()
+	hosts := utils.GetIpList(nil)
+	for _, ipaddr := range hosts {
+		job := jobs.NewFindPrinterJob(ipaddr)
 		group.DispatchJob(job)
 	}
-
 	group.Stop()
 	group.Wait()
 
-	//for i := 1; i <= 100; i++ {
-	//	work := <- group.WaitingChan
-	//	fmt.Println(work)
-	//}
 }

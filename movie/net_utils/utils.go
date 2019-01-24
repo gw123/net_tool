@@ -11,6 +11,7 @@ import (
 	"strings"
 	"fmt"
 	"encoding/base64"
+	"github.com/axgle/mahonia"
 )
 
 func CopyToMany(src io.Reader, args ... io.Writer) (err error) {
@@ -65,7 +66,6 @@ func Clip(in io.Reader, out io.Writer, x0, y0, x1, y1, quality int) (ext string,
 	if y1 == -1 {
 		y1 = origin.Bounds().Size().Y
 	}
-
 	switch fm {
 	case "jpeg":
 		img := origin.(*image.YCbCr)
@@ -114,4 +114,22 @@ func ConvertBase64Image(url string) (imageData []byte, ext string, err error) {
 	}
 
 	return
+}
+
+/***
+ * 将utf-8 转码 gbk
+ */
+func ConvertToGbk(src string) string {
+	enc := mahonia.NewEncoder("gbk")
+	str := enc.ConvertString(src)
+	return str
+}
+
+/***
+ * 将gbk 转为 u8
+ */
+func ConvertToU8(src string) string {
+	enc := mahonia.NewEncoder("utf8")
+	str := enc.ConvertString(src)
+	return str
 }

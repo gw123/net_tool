@@ -41,7 +41,7 @@ func demo2() {
 
 }
 
-func GetIpList(ignoreNetworks []string) (ipList []string) {
+func GetLocalIpList(ignoreNetworks []string) (ipList []string) {
 	ipList = make([]string, 0)
 	netAdapers, err := net.Interfaces()
 	if err != nil {
@@ -71,27 +71,65 @@ func GetIpList(ignoreNetworks []string) (ipList []string) {
 					if strings.Contains(netAdaper.Name, "VMware") {
 						continue
 					}
+					ipList = append(ipList, ipnet.IP.String())
+				}
+			}
+		}
+	}
 
-					if strings.Contains(netAdaper.Name, "vmnet") {
+	return
+}
+
+func GetIpList(ignoreNetworks []string) (ipList []string) {
+	ipList = make([]string, 0)
+	netAdapers, err := net.Interfaces()
+	if err != nil {
+		log.Fatal("无法获取本地网络信息:", err)
+	}
+
+	for _, netAdaper := range netAdapers {
+		if netAdaper.Flags&net.FlagUp == 0 {
+			//fmt.Println(netAdaper.Name, "断开连接")
+			continue
+		}
+		//fmt.Println(index, netAdaper)
+		addrs, err := netAdaper.Addrs()
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		for _, address := range addrs {
+			//fmt.Println(i, address)
+			// 检查ip地址判断是否回环地址
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					if strings.HasPrefix(ipnet.IP.String(), "169.254") {
 						continue
 					}
 
-					fmt.Println(netAdaper.Name)
-					fmt.Print("\tIp2: ", ipnet.IP.String())
-					fmt.Println("\tmask: ", ipnet.Mask)
+					if strings.Contains(netAdaper.Name, "VMware") {
+						continue
+					}
+
+					//fmt.Println(netAdaper.Name)
+					//fmt.Print("\tIp2: ", ipnet.IP.String())
+					//fmt.Println("\tmask: ", ipnet.Mask)
 					ipInt := InetAtoN(ipnet.IP.String())
 					mastInt := big.NewInt(0)
 					mastInt.SetBytes(ipnet.Mask)
 					mastInt2 := mastInt.Int64()
 					totalIp := 0xffffffff - mastInt2
-					startIP := InetNtoA(ipInt & mastInt2)
-
-					fmt.Println("\t网络地址", startIP, "totalIp:", totalIp)
-					fmt.Println("\tMac地址:", netAdaper.HardwareAddr)
+					InetNtoA(ipInt & mastInt2)
+					//startIP := InetNtoA(ipInt & mastInt2)
+					//fmt.Println("\t网络地址", startIP, "totalIp:", totalIp)
+					//fmt.Println("\tMac地址:", netAdaper.HardwareAddr)
 					var i int64
 					for i = 1; i < totalIp; i++ {
 						newip := InetNtoA((ipInt & mastInt2) + i)
 						//fmt.Print(newip, "\t")
+						if ipnet.IP.String() == newip {
+							continue
+						}
 						ipList = append(ipList, newip)
 					}
 					//fmt.Println()
@@ -99,7 +137,6 @@ func GetIpList(ignoreNetworks []string) (ipList []string) {
 			}
 		}
 	}
-
 	return
 }
 

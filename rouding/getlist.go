@@ -164,9 +164,9 @@ func getResourceList(url string) (list []string, err error) {
 
 func main() {
 	db.Connect()
-	for index := 51; index <= 59; index++ {
+	for index := 47; index <= 60; index++ {
 		fmt.Println("caiji the ", index, " page")
-		url := fmt.Sprintf("http://www.rouding.com/life-diy/%d.html", index)
+		url := fmt.Sprintf("http://www.rouding.com/chuantongshougong/%d.html", index)
 		list, err := getResourceList(url)
 		if err != nil {
 			fmt.Println("getResourceList", err)
@@ -175,7 +175,7 @@ func main() {
 
 		for index, resourceUrl := range list {
 			fmt.Println("caiji resource", index, resourceUrl)
-			resource, err := getResource(resourceUrl, "life-diy")
+			resource, err := getResource(resourceUrl, "chuantongshougong")
 			if err != nil {
 				fmt.Println("caiji failed !!", resourceUrl, err)
 				continue
@@ -186,7 +186,6 @@ func main() {
 		time.Sleep(time.Second * 2)
 		fmt.Println("caiji the ", index, " page", "over!")
 	}
-
 	//resource, err := getResource("http://www.rouding.com/life-diy/2.html")
 	//fmt.Println(resource, err)
 	//db.DbInstance.Create(resource)

@@ -1,8 +1,7 @@
-package main
+package libs
 
 import (
 	"github.com/gw123/net_tool/utils"
-	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"sync"
 	"strings"
 	"sort"
-	"github.com/fpay/escpos-go/printer/connection"
 )
 
 type HostMap map[string]int
@@ -19,29 +17,12 @@ type HostMap map[string]int
 var SuccessMap HostMap
 var mutex sync.Mutex
 
-func main() {
-	var count int
-	var timeout int64
-	var size int
-	var neverstop bool
+func GetAliveHosts() []string {
 	hostArr := make([]string, 0)
-
-	flag.Int64Var(&timeout, "w", 5000, "等待每次回复的超时时间(毫秒)。")
-	flag.IntVar(&count, "n", 1, "要发送的回显请求数。")
-	flag.IntVar(&size, "l", 32, "要发送缓冲区大小。")
-	flag.BoolVar(&neverstop, "t", false, "Ping 指定的主机，直到停止。")
-	flag.Parse()
-	//args := flag.Args()
-	argsmap := map[string]interface{}{}
-	argsmap["w"] = timeout
-	argsmap["n"] = count
-	argsmap["l"] = size
-	argsmap["t"] = neverstop
-
 	hosts := utils.GetIpList(nil)
-
+	var timeout int64 = 3
 	isNeedRoot := func(host string) bool {
-		conn, err := net.DialTimeout("ip4:icmp", host, time.Duration(timeout*1000*1000))
+		conn, err := net.DialTimeout("ip4:icmp", host, time.Duration((time.Duration)(timeout)*time.Second))
 		if err != nil {
 			if strings.Contains(err.Error(), "operation not permitted") {
 				return true
@@ -54,7 +35,7 @@ func main() {
 
 	if isNeedRoot {
 		fmt.Println("需要管理员权限...")
-		return
+		return nil
 	}
 
 	fmt.Println("开始扫描.....")
@@ -63,7 +44,7 @@ func main() {
 		wg.Add(1)
 		go func(ip string, c *sync.WaitGroup) {
 			defer wg.Done()
-			isOk := ping(ip, argsmap)
+			isOk := ping(ip)
 			mutex.Lock()
 			if isOk {
 				hostArr = append(hostArr, ip)
@@ -72,24 +53,13 @@ func main() {
 		}(host, wg)
 	}
 	wg.Wait()
-
 	sort.Strings(hostArr)
-	for _, ip := range hostArr {
-		//fmt.Println(ip)
-		conn, err := connection.NewNetConnection(ip + ":9100")
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		_, err = conn.Write([]byte("###########\n"))
-		if err != nil {
-			fmt.Println(ip, err)
-			continue
-		}
-	}
+	return hostArr
+
+
 }
 
-func ping(host string, args map[string]interface{}) bool {
+func ping(host string) bool {
 	var timeout = 5000
 	size := 32
 	starttime := time.Now()
