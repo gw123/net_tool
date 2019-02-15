@@ -1,8 +1,7 @@
 package main
 
 import (
-	"github.com/gw123/net_tool/utils"
-	"flag"
+		"flag"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"sort"
 	"github.com/fpay/escpos-go/printer/connection"
+	"github.com/gw123/net_tool/net_utils"
 )
 
 type HostMap map[string]int
@@ -38,7 +38,7 @@ func main() {
 	argsmap["l"] = size
 	argsmap["t"] = neverstop
 
-	hosts := utils.GetIpList(nil)
+	hosts := net_utils.GetIpList(nil)
 
 	isNeedRoot := func(host string) bool {
 		conn, err := net.DialTimeout("ip4:icmp", host, time.Duration(timeout*1000*1000))

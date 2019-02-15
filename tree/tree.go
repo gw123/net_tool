@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/gw123/net_tool/worker/tree/stack"
+	"github.com/gw123/net_tool/tre"
+	"github.com/gw123/net_tool/tree/stack"
 )
 
 type Operator uint16
@@ -57,35 +58,35 @@ func init() {
 }
 
 func main() {
-
-	stack := stack.NewStack()
+	operatorStack := stack.NewStack()
 	var input = []byte("a+b*c+(d*e+f)*g")
 	var result = make([]byte, 0)
+
 	for _, ele := range input {
 		if curOperator, ok := OperatorMap[(Operator)(ele)]; ok {
 			//操作符号
 			var topOpcode Operator
 			var ok bool
-			topOpcode, ok = stack.Peak().(Operator)
+			topOpcode, ok = operatorStack.Peak().(Operator)
 			if !ok {
 				//fmt.Printf("topOpcode %c", topOpcode)
-				stack.Push(curOperator)
+				operatorStack.Push(curOperator)
 				continue
 			}
 
 			switch curOperator {
 			case OP_RBRACKET:
 				for topOpcode != OP_LBRACKET {
-					stack.Pop()
+					operatorStack.Pop()
 					result = append(result, byte(topOpcode))
 					//fmt.Printf("%s , %c\n", string(result), byte(topOpcode))
-					if topOpcode, ok = stack.Peak().(Operator); !ok {
+					if topOpcode, ok = operatorStack.Peak().(Operator); !ok {
 						break
 					}
 				}
 
 				if curOperator == OP_LBRACKET {
-					stack.Pop()
+					operatorStack.Pop()
 				} else {
 					//fmt.Printf("表达式有问题 %c\n", curOperator)
 				}
@@ -96,15 +97,15 @@ func main() {
 					if topOpcode == OP_LBRACKET {
 						break
 					}
-					stack.Pop()
+					operatorStack.Pop()
 					result = append(result, byte(topOpcode))
 					//fmt.Printf("%s , %c\n", string(result), byte(topOpcode))
-					if topOpcode, ok = stack.Peak().(Operator); !ok {
+					if topOpcode, ok = operatorStack.Peak().(Operator); !ok {
 						break
 					}
 				}
 				//fmt.Printf("入栈 %c\n", curOperator)
-				stack.Push(curOperator)
+				operatorStack.Push(curOperator)
 			}
 		} else {
 			result = append(result, ele)
@@ -113,9 +114,9 @@ func main() {
 	}
 
 	var e interface{}
-	e = stack.Pop()
+	e = operatorStack.Pop()
 
-	for ; e != nil; e = stack.Pop() {
+	for ; e != nil; e = operatorStack.Pop() {
 		el, ok := e.(Operator)
 		if !ok {
 			continue
@@ -126,6 +127,6 @@ func main() {
 		result = append(result, byte(el))
 	}
 
-	fmt.Println("\n stack:", string(result))
+	fmt.Println("\n operatorStack:", string(result))
 
 }

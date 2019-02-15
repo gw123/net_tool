@@ -30,7 +30,7 @@ func main() {
 	group := worker.NewWorkerGroup(256)
 	group.Start()
 	//aliveHosts := libs.GetAliveHosts()
-	hosts := utils.GetIpList(nil)
+	hosts := net_utils.GetIpList(nil)
 	for _, ipaddr := range hosts {
 		job := jobs.NewFindPrinterJob(ipaddr)
 		group.DispatchJob(job)

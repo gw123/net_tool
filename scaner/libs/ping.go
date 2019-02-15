@@ -19,7 +19,7 @@ var mutex sync.Mutex
 
 func GetAliveHosts() []string {
 	hostArr := make([]string, 0)
-	hosts := utils.GetIpList(nil)
+	hosts := net_utils.GetIpList(nil)
 	var timeout int64 = 3
 	isNeedRoot := func(host string) bool {
 		conn, err := net.DialTimeout("ip4:icmp", host, time.Duration((time.Duration)(timeout)*time.Second))

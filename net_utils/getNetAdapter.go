@@ -1,4 +1,4 @@
-package utils
+package net_utils
 
 import (
 	"net"
@@ -41,6 +41,7 @@ func demo2() {
 
 }
 
+// 获取自己机器的IP地址
 func GetLocalIpList(ignoreNetworks []string) (ipList []string) {
 	ipList = make([]string, 0)
 	netAdapers, err := net.Interfaces()
@@ -80,7 +81,8 @@ func GetLocalIpList(ignoreNetworks []string) (ipList []string) {
 	return
 }
 
-func GetIpList(ignoreNetworks []string) (ipList []string) {
+//获取IP地址列表
+func GetIpList() (ipList []string) {
 	ipList = make([]string, 0)
 	netAdapers, err := net.Interfaces()
 	if err != nil {
@@ -111,15 +113,28 @@ func GetIpList(ignoreNetworks []string) (ipList []string) {
 						continue
 					}
 
+					if strings.Contains(netAdaper.Name, "vmnet") {
+						continue
+					}
+
+					if strings.Contains(netAdaper.Name, "docker") {
+						continue
+					}
+
 					//fmt.Println(netAdaper.Name)
 					//fmt.Print("\tIp2: ", ipnet.IP.String())
 					//fmt.Println("\tmask: ", ipnet.Mask)
 					ipInt := InetAtoN(ipnet.IP.String())
 					mastInt := big.NewInt(0)
 					mastInt.SetBytes(ipnet.Mask)
+
 					mastInt2 := mastInt.Int64()
 					totalIp := 0xffffffff - mastInt2
-					InetNtoA(ipInt & mastInt2)
+					if totalIp > 4096 {
+						continue
+					}
+
+					//InetNtoA(ipInt & mastInt2)
 					//startIP := InetNtoA(ipInt & mastInt2)
 					//fmt.Println("\t网络地址", startIP, "totalIp:", totalIp)
 					//fmt.Println("\tMac地址:", netAdaper.HardwareAddr)
