@@ -38,7 +38,7 @@ func main() {
 	argsmap["l"] = size
 	argsmap["t"] = neverstop
 
-	hosts := net_utils.GetIpList(nil)
+	hosts := net_utils.GetIpList()
 
 	isNeedRoot := func(host string) bool {
 		conn, err := net.DialTimeout("ip4:icmp", host, time.Duration(timeout*1000*1000))
