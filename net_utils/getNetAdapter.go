@@ -42,7 +42,7 @@ func demo2() {
 }
 
 // 获取自己机器的IP地址
-func GetLocalIpList(ignoreNetworks []string) (ipList []string) {
+func GetLocalIpList() (ipList []string) {
 	ipList = make([]string, 0)
 	netAdapers, err := net.Interfaces()
 	if err != nil {
