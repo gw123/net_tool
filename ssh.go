@@ -1,4 +1,4 @@
-package main
+package net_tool
 
 import (
 	"golang.org/x/crypto/ssh/terminal"
@@ -79,7 +79,7 @@ func tryAuth()  {
 }
 
 //远程执行ssh
-func main() {
+func main2() {
 	session, err := connect("root", "admin", "192.168.0.1", 22)
 	if err != nil {
 		log.Fatal("connect: ", err)

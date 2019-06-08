@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"strconv"
+	"math"
+	"github.com/google/gopacket/pcap"
 )
 
 func InetNtoA(ip int64) string {
@@ -68,7 +70,6 @@ func GetLocalIpList() (ipList []string, err error) {
 	return ipList, nil
 }
 
-
 /***
     获取本机外其他可用IP地址列表
     findLocal 是否查找本地的虚拟网卡
@@ -95,7 +96,6 @@ func GetIpList(findLocal bool) (ipList []string, netAdapers []net.Interface, err
 			// 检查ip地址判断是否回环地址
 			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 				if ipnet.IP.To4() != nil {
-
 					if strings.HasPrefix(ipnet.IP.String(), "169.254") {
 						continue
 					}
@@ -143,6 +143,30 @@ func GetIpList(findLocal bool) (ipList []string, netAdapers []net.Interface, err
 	return
 }
 
+type IP uint32
+
+// 根据IP和mask换算内网IP范围
+func GetNetIpList(ipNet *net.IPNet) []string {
+	ip := ipNet.IP.To4()
+	var min, max IP
+	var data []string
+	for i := 0; i < 4; i++ {
+		b := IP(ip[i] & ipNet.Mask[i])
+		min += b << ((3 - uint(i)) * 8)
+	}
+	one, _ := ipNet.Mask.Size()
+	max = min | IP(math.Pow(2, float64(32-one))-1)
+	// max 是广播地址，忽略
+	// i & 0x000000ff  == 0 是尾段为0的IP，根据RFC的规定，忽略
+	for i := min; i < max; i++ {
+		if i&0x000000ff == 0 {
+			continue
+		}
+		data = append(data, InetNtoA(int64(i)))
+	}
+	return data
+}
+
 func int2bin(v int) string {
 	var tmp string
 	mask := 0x1
@@ -172,3 +196,115 @@ func (h IpSortList) Less(i, j int) bool {
 	ip2 := InetAtoN(h[j].Ip)
 	return ip1 < ip2 // 按值排序
 }
+
+
+func GetAllNetIpList() (netIpLists []*NetIpList, err error) {
+	ifces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, ifce := range ifces {
+		if ifce.Flags&net.FlagUp == 0 {
+			continue
+		}
+		//过滤虚拟网卡
+		if strings.Contains(ifce.Name, "VMware") ||
+			strings.Contains(ifce.Name, "vmnet") ||
+			strings.Contains(ifce.Name, "vmnet") ||
+			strings.Contains(ifce.Name, "VirtualBox") ||
+			strings.Contains(ifce.Name, "docker") {
+			continue
+		}
+
+		addrs, err := ifce.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok &&
+				ipnet.IP.To4() != nil &&
+				!ipnet.IP.IsLoopback() &&
+				!strings.HasPrefix(ipnet.IP.String(), "169.254") {
+				iplist := GetNetIpList(ipnet)
+				netIpList := NewNetIPList(ifce)
+				netIpList.Iplist = append(netIpList.Iplist, iplist...)
+				netIpLists = append(netIpLists, netIpList)
+			}
+		}
+	}
+	return netIpLists, nil
+}
+
+
+func FindIfIdGetPrefixIp(prefix string) string {
+	//  获取网卡列表
+	var devices []pcap.Interface
+	devices, _ = pcap.FindAllDevs()
+	for _, d := range devices {
+		for _, addr := range d.Addresses {
+			if ip4 := addr.IP.To4(); ip4 != nil {
+				ip4.Mask(addr.Netmask)
+				if strings.HasPrefix(ip4.String(), prefix) {
+					//data, _ := json.MarshalIndent(d, "", "  ")
+					//fmt.Println(string(data))
+					return d.Name
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func FindPcapIfNameByIp(ip string) string {
+	//  获取网卡列表
+	var devices []pcap.Interface
+	devices, _ = pcap.FindAllDevs()
+
+	for _, d := range devices {
+		for _, addr := range d.Addresses {
+			if ip4 := addr.IP.To4(); ip4 != nil {
+				if net.ParseIP(ip).Mask(addr.Netmask).Equal(ip4.Mask(addr.Netmask).To4()) {
+					return d.Name
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func FindIfceByIp(ip string) *net.Interface {
+	//  获取网卡列表
+	devices, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, d := range devices {
+		addrs, err := d.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok {
+				if ipnet.IP.To4() != nil {
+					if ipnet.IP.Mask(ipnet.Mask).Equal(net.ParseIP(ip).Mask(ipnet.Mask)) {
+						return &d
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+//func FindIfIdGetMac(mac []byte) string {
+//	//  获取网卡列表
+//	var devices []pcap.Interface
+//	devices, _ = pcap.FindAllDevs()
+//	for _, d := range devices {
+//		if d.Addresses == mac {
+//			return d.Name
+//		}
+//	}
+//	return ""
+//}

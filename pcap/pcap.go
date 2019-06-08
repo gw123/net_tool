@@ -36,15 +36,16 @@ func main() {
 	}
 	defer handle.Close()
 
-	handle.SetBPFFilter("tcp and port 80")
+	handle.SetBPFFilter("tcp")
+	handle.SetBPFFilter("port 80")
 	packetSource := gopacket.NewPacketSource(
 		handle,
 		handle.LinkType(),
 	)
 
-	//for packet := range packetSource.Packets() {
-	//	fmt.Println(packet)
-	//}
+	for packet := range packetSource.Packets() {
+		//fdmt.Println(packet)
+	}
 	dumpFile("abc.pcap" ,packetSource.Packets())
 }
 
